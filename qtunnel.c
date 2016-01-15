@@ -5,10 +5,13 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <string.h>
+#include <sys/select.h>
+#include <unistd.h>
+#include <sodium.h>
 #include "qtunnel.h"
 
 struct struct_options options;
-struct tunnel qtunnel;
+//struct tunnel qtunnel;
 char *short_opts = "b:c:l:g:s:";
 static struct option long_opts[] = {
     {"backend", required_argument, NULL, 'b'},
@@ -19,6 +22,10 @@ static struct option long_opts[] = {
     {0, 0, 0, 0}
 };
 
+int serv_sock, clnt_sock, remote_sock;
+struct sockaddr_in serv_adr, clnt_adr, remote_adr;
+int clnt_adr_size;
+
 int main(int argc, char *argv[]) {
 //    while ((c = getopt_long(argc, argv, short_opts, long_opts, NULL)) != -1) {
 //        switch(c) {
@@ -26,6 +33,14 @@ int main(int argc, char *argv[]) {
 //
 //        }
 //    }
+    //get_parm();
+    if (sodium_init() == -1) {
+        puts("hehe");
+        return 1;
+    } else {
+        puts("xixi");
+    }
+
     options.faddr = "0.0.0.0:8765";
     options.baddr = "127.0.0.1:8766";
     options.cryptoMethod = "RC4";
@@ -33,31 +48,75 @@ int main(int argc, char *argv[]) {
     options.clientMod = 1;
     puts("ok");
 
-    build_server();
+//    build_server();
+//
+//    while(1) {
+//        clnt_sock = accept(serv_sock, (struct sockaddr*) &clnt_adr, &clnt_adr_size);
+//        handle_client(clnt_sock);
+//
+//    }
 
-    while(1) {
-        if(waite_for_client() == 0) {
-            handle_client();
-        }
-    }
+//    while(1) {
+//        if(waite_for_client() == 0) {
+//            handle_client();
+//        }
+//    }
 
-    return 0;
     puts("ok 2");
+    return 0;
+
 
 
 
 }
 
 int build_server() {
-    memset(&qtunnel.server_addr, 0, sizeof(qtunnel.server_addr));
+    memset(&serv_adr, 0, sizeof(serv_adr));
 
-    qtunnel.server_addr.sin_port = htons(atoi("1234"));
-    qtunnel.server_addr.sin_family = AF_INET;
-    qtunnel.server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv_adr.sin_port = htons(atoi("1234"));
+    serv_adr.sin_family = AF_INET;
+    serv_adr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    qtunnel.server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    serv_sock = socket(AF_INET, SOCK_STREAM, 0);
 
-    bind(qtunnel.server_socket, (struct sockaddr*)&qtunnel.server_addr, sizeof(qtunnel.server_addr));
+    bind(serv_sock, (struct sockaddr*)&serv_adr, sizeof(serv_adr));
 
-    listen(qtunnel.server_socket,1);
+    listen(serv_sock,1);
+}
+
+
+void handle_client(int clnt_sock) {
+    memset(&remote_adr, 0, sizeof(remote_adr));
+    remote_adr.sin_family = AF_INET;
+    remote_adr.sin_port = htons(atoi("2334"));
+    remote_adr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    remote_sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    connect(remote_sock, (struct sockaddr *) &remote_adr, sizeof(remote_adr));
+
+    fd_set io;
+    char buffer[4096];
+    for( ; ; ) {
+        FD_ZERO(&io);
+        FD_SET(clnt_sock, &io);
+        FD_SET(remote_sock, &io);
+        select(fd(), &io, NULL, NULL, NULL);
+        if(FD_ISSET(clnt_sock, &io)) {
+            int count = recv(clnt_sock, buffer, sizeof(buffer), 0);
+            send(remote_sock, buffer, count, 0);
+        }
+
+        if(FD_ISSET(remote_sock, &io)) {
+            int count = recv(remote_sock, buffer, sizeof(buffer), 0);
+            send(clnt_sock, buffer, count, 0);
+        }
+    }
+
+}
+
+int fd() {
+    unsigned int fd = clnt_sock;
+    if(remote_sock > fd) fd = remote_sock;
+    return fd + 1;
 }

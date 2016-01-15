@@ -10,15 +10,6 @@ struct struct_options {
     int clientMod;
 };
 
-struct tunnel {
-    int server_socket;
-    int client_socket;
-    int remote_socket;
-
-    struct sockaddr_in server_addr;
-    struct sockaddr_in client_addr;
-    struct sockaddr_in remote_addr;
-};
 
 
 #endif
