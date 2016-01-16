@@ -8,6 +8,7 @@
 #include <sys/select.h>
 #include <unistd.h>
 #include <sodium.h>
+#include <openssl/rc4.h>
 #include "qtunnel.h"
 
 struct struct_options options;
@@ -47,6 +48,21 @@ int main(int argc, char *argv[]) {
     options.secret = "secret";
     options.clientMod = 1;
     puts("ok");
+
+    char key[] = "secret";
+    char origin[] = "123123123123";
+    char tmp[256], tmp2[256];
+    printf("sizedof = %d\n",sizeof(tmp));
+    memset(tmp, 0, sizeof(tmp));
+    memset(tmp2, 0, sizeof(tmp2));
+    RC4_KEY rc4key;
+    RC4_set_key(&rc4key, strlen(key), (const unsigned char*)key);
+    RC4(&rc4key, strlen(origin), (const unsigned char*)origin, tmp);
+    printf("tmp ==  %s\n", tmp);
+    RC4_set_key(&rc4key, strlen(key), (const unsigned char*)key);
+    RC4(&rc4key, strlen(tmp), (const unsigned char*)tmp, tmp2);
+    printf("tmp2 == %s\n",tmp2);
+    printf("orig == %s\n", origin);
 
 //    build_server();
 //
