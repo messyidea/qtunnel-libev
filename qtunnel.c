@@ -9,9 +9,11 @@
 #include <unistd.h>
 #include <sodium.h>
 #include <openssl/rc4.h>
+#include <openssl/md5.h>
 #include "qtunnel.h"
 
 struct struct_options options;
+typedef unsigned char byte;
 //struct tunnel qtunnel;
 char *short_opts = "b:c:l:g:s:";
 static struct option long_opts[] = {
@@ -26,8 +28,15 @@ static struct option long_opts[] = {
 int serv_sock, clnt_sock, remote_sock;
 struct sockaddr_in serv_adr, clnt_adr, remote_adr;
 int clnt_adr_size;
-
-int main(int argc, char *argv[]) {
+byte* secretToKey(char* sec, int size);
+byte key[16];
+int main(int argc, char *argv[]){
+    puts("1");
+   // secretToKey(16);
+    //key = secretToKey("secret", 16);
+    strncpy(key, secretToKey("testsecret", 16), 16);
+    printf("sec = %s\n", key);
+    puts("2");
 //    while ((c = getopt_long(argc, argv, short_opts, long_opts, NULL)) != -1) {
 //        switch(c) {
 //            case 'b':
@@ -35,34 +44,37 @@ int main(int argc, char *argv[]) {
 //        }
 //    }
     //get_parm();
-    if (sodium_init() == -1) {
-        puts("hehe");
-        return 1;
-    } else {
-        puts("xixi");
-    }
-
-    options.faddr = "0.0.0.0:8765";
-    options.baddr = "127.0.0.1:8766";
-    options.cryptoMethod = "RC4";
-    options.secret = "secret";
-    options.clientMod = 1;
-    puts("ok");
-
-    char key[] = "secret";
-    char origin[] = "123123123123";
-    char tmp[256], tmp2[256];
-    printf("sizedof = %d\n",sizeof(tmp));
-    memset(tmp, 0, sizeof(tmp));
-    memset(tmp2, 0, sizeof(tmp2));
-    RC4_KEY rc4key;
-    RC4_set_key(&rc4key, strlen(key), (const unsigned char*)key);
-    RC4(&rc4key, strlen(origin), (const unsigned char*)origin, tmp);
-    printf("tmp ==  %s\n", tmp);
-    RC4_set_key(&rc4key, strlen(key), (const unsigned char*)key);
-    RC4(&rc4key, strlen(tmp), (const unsigned char*)tmp, tmp2);
-    printf("tmp2 == %s\n",tmp2);
-    printf("orig == %s\n", origin);
+//    if (sodium_init() == -1) {
+//        puts("hehe");
+//        return 1;
+//    } else {
+//        puts("xixi");
+//    }
+//
+//    options.faddr = "0.0.0.0:8765";
+//    options.baddr = "127.0.0.1:8766";
+//    options.cryptoMethod = "RC4";
+//    options.secret = "secret";
+//    options.clientMod = 1;
+//    puts("ok");
+//
+//    byte key2[] = "testsecret";
+//    byte origin[] = "thisISaCLEARtext";
+//    byte tmp[256], tmp2[256];
+//
+//
+//    printf("key == %s\n", key);
+//    printf("sizedof = %d\n",sizeof(tmp));
+//    memset(tmp, 0, sizeof(tmp));
+//    memset(tmp2, 0, sizeof(tmp2));
+//    RC4_KEY rc4key;
+//    RC4_set_key(&rc4key, 16, key);
+//    RC4(&rc4key, strlen(origin), origin, tmp);
+//    printf("tmp ==  %s\n", tmp);
+//    RC4_set_key(&rc4key, 16, key);
+//    RC4(&rc4key, strlen(tmp), tmp, tmp2);
+//    printf("tmp2 == %s\n",tmp2);
+//    printf("orig == %s\n", origin);
 
     build_server();
     puts("build ok!");
@@ -89,6 +101,29 @@ int main(int argc, char *argv[]) {
 
 
 
+}
+
+byte* secretToKey(char* sec, int size) {
+    byte buf[16];
+    byte buf2[16];
+    MD5_CTX h;
+    MD5_Init(&h);
+    int count = size / 16;
+    int i,j;
+    printf("count == %d\n", count);
+    for(i = 0; i < count; ++i) {
+        MD5_Update(&h, sec, strlen(sec));
+        MD5_Final(buf2, &h);
+        //printf("buf2 == %s\n",buf2);
+        strncpy(buf, buf2, 16);
+    }
+    buf2[15]=0;
+    //printf("len == %d\n",strlen(buf2));
+    for(i=0;i<16; ++i) {
+        printf("%d\n",buf2[i]);
+    }
+
+    return buf2;
 }
 
 int build_server() {
@@ -126,8 +161,8 @@ void handle_client(int clnt_sock) {
     remote_adr.sin_family = AF_INET;
 
 
-    remote_adr.sin_port = htons(atoi("7655"));
-    remote_adr.sin_addr.s_addr = inet_addr("115.28.224.1");
+    remote_adr.sin_port = htons(atoi("8766"));
+    remote_adr.sin_addr.s_addr = inet_addr("23.95.113.");
 
     remote_sock = socket(PF_INET, SOCK_STREAM, 0);
     if(remote_sock < 0) {
@@ -141,11 +176,10 @@ void handle_client(int clnt_sock) {
     }
 
     fd_set io;
-    char buffer[4096];
-    char buffer2[4096];
-    char key[] = "secret";
+    byte buffer[4096];
+    byte buffer2[4096];
     RC4_KEY rc4key;
-    RC4_set_key(&rc4key, strlen(key), (const unsigned char*)key);
+    RC4_set_key(&rc4key, 16, key);
 
     for( ; ; ) {
         FD_ZERO(&io);
@@ -166,9 +200,9 @@ void handle_client(int clnt_sock) {
             if(count == 0) return ;
             memset(buffer2, 0, sizeof(buffer2));
             printf("buffer = %ds\n", buffer);
-            RC4_set_key(&rc4key, strlen(key), (const unsigned char*)key);
-            RC4(&rc4key, strlen(buffer), (const unsigned char*)buffer, buffer2);
-            send(remote_sock, buffer, count, 0);
+            RC4_set_key(&rc4key, 16, key);
+            RC4(&rc4key, count, buffer, buffer2);
+            send(remote_sock, buffer2, count, 0);
             puts("send ok");
         }
 
@@ -181,9 +215,9 @@ void handle_client(int clnt_sock) {
             printf("r2 count == %d\n", count);
             if(count == 0) return ;
             memset(buffer2, 0, sizeof(buffer2));
-            RC4_set_key(&rc4key, strlen(key), (const unsigned char*)key);
-            RC4(&rc4key, strlen(buffer), (const unsigned char*)buffer, buffer2);
-            send(clnt_sock, buffer, count, 0);
+            RC4_set_key(&rc4key, 16, key);
+            RC4(&rc4key, count, buffer, buffer2);
+            send(clnt_sock, buffer2, count, 0);
             puts("send ok");
         }
     }
