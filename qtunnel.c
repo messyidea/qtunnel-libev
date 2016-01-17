@@ -10,12 +10,11 @@
 #include <sodium.h>
 #include <openssl/rc4.h>
 #include <openssl/md5.h>
+#include <openssl/evp.h>
 #include "qtunnel.h"
 
 struct struct_options options;
 struct struct_setting setting;
-
-
 
 int serv_sock, clnt_sock, remote_sock;
 struct sockaddr_in serv_adr, clnt_adr, remote_adr;
@@ -109,7 +108,13 @@ void get_param(int argc, char *argv[]) {
 }
 
 void print_usage() {
-    puts("xixi");
+    printf("Options:\n\
+  --help\n\
+  --backend=remotehost:remoteport    remote\n\
+  --listen=localhost:localport   local\n\
+  --clientmod=true or false  buffer size\n\
+  --secret=secret secret\
+\n");
 }
 
 byte* secretToKey(char* sec, int size) {
