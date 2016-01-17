@@ -1,12 +1,12 @@
 # qtunnel-c
 
-[qtunnel]("https://github.com/getqujing/qtunnel") in c
+[qtunnel](https://github.com/getqujing/qtunnel) in c
 
 As qtunnel can not run on my loongson 8089d (alloc memory error, gccgo), I write this.
 
 Because of lacking knowledge of openssl and aes, it could only support rc4 now.
 
-it can work with [qtunnel]("https://github.com/getqujing/qtunnel") in go.
+it can work with [qtunnel](https://github.com/getqujing/qtunnel) in go.
 
 
 usage
