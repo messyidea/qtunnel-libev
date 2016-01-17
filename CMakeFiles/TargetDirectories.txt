@@ -1,1 +1,0 @@
-/home/ymc/project/qtunnel-c/CMakeFiles/qtunnel_c.dir

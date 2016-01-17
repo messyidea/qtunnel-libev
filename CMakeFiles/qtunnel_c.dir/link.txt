@@ -1,1 +1,0 @@
-/usr/bin/cc     CMakeFiles/qtunnel_c.dir/qtunnel.c.o  -o qtunnel_c -rdynamic -lssl -lcrypto 
