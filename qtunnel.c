@@ -7,7 +7,6 @@
 #include <string.h>
 #include <sys/select.h>
 #include <unistd.h>
-#include <sodium.h>
 #include <openssl/rc4.h>
 #include <openssl/md5.h>
 #include <openssl/evp.h>
