@@ -1,0 +1,38 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/ymc/project/qtunnel-c/qtunnel.c
+stdio.h
+-
+stdlib.h
+-
+unistd.h
+-
+getopt.h
+-
+arpa/inet.h
+-
+sys/socket.h
+-
+string.h
+-
+sys/select.h
+-
+unistd.h
+-
+sodium.h
+-
+openssl/rc4.h
+-
+openssl/md5.h
+-
+qtunnel.h
+/home/ymc/project/qtunnel-c/qtunnel.h
+
+/home/ymc/project/qtunnel-c/qtunnel.h
+
