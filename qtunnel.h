@@ -1,6 +1,7 @@
 #ifndef QTUNNEL_H
 #define QTUNNEL_H
-
+#include <getopt.h>
+#include <unistd.h>
 typedef unsigned char byte;
 
 struct struct_options {
