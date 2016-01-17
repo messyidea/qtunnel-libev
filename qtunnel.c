@@ -13,73 +13,26 @@
 #include "qtunnel.h"
 
 struct struct_options options;
-typedef unsigned char byte;
-//struct tunnel qtunnel;
-char *short_opts = "b:c:l:g:s:";
-static struct option long_opts[] = {
-    {"backend", required_argument, NULL, 'b'},
-    {"clientmode", required_argument, NULL, 'c'},
-    {"listen", required_argument, NULL, 'l'},
-    {"logto", required_argument, NULL, 'g'},
-    {"secret", required_argument, NULL, 's'},
-    {0, 0, 0, 0}
-};
+struct struct_setting setting;
+
+
 
 int serv_sock, clnt_sock, remote_sock;
 struct sockaddr_in serv_adr, clnt_adr, remote_adr;
 int clnt_adr_size;
-byte* secretToKey(char* sec, int size);
-byte key[16];
+
 
 int main(int argc, char *argv[]){
-    puts("1");
-   // secretToKey(16);
-    //key = secretToKey("secret", 16);
-    strncpy(key, secretToKey("secret", 16), 16);
-    //printf("sec = %s\n", key);
-    //RC4_set_key(&rc4key, 16, key);
-    puts("2");
-//    while ((c = getopt_long(argc, argv, short_opts, long_opts, NULL)) != -1) {
-//        switch(c) {
-//            case 'b':
-//
-//        }
-//    }
-    //get_parm();
-//    if (sodium_init() == -1) {
-//        puts("hehe");
-//        return 1;
-//    } else {
-//        puts("xixi");
-//    }
-//
+
+    get_param(argc, argv);
+
 //    options.faddr = "0.0.0.0:8765";
-//    options.baddr = "127.0.0.1:8766";
+//    options.baddr = "";
 //    options.cryptoMethod = "RC4";
 //    options.secret = "secret";
 //    options.clientMod = 1;
-//    puts("ok");
-//
-//    byte key2[] = "testsecret";
-//    byte origin[] = "thisISaCLEARtext";
-//    byte tmp[256], tmp2[256];
-//
-//
-//    printf("key == %s\n", key);
-//    printf("sizedof = %d\n",sizeof(tmp));
-//    memset(tmp, 0, sizeof(tmp));
-//    memset(tmp2, 0, sizeof(tmp2));
-//    RC4_KEY rc4key;
-//    RC4_set_key(&rc4key, 16, key);
-//    RC4(&rc4key, strlen(origin), origin, tmp);
-//    printf("tmp ==  %s\n", tmp);
-//    RC4_set_key(&rc4key, 16, key);
-//    RC4(&rc4key, strlen(tmp), tmp, tmp2);
-//    printf("tmp2 == %s\n",tmp2);
-//    printf("orig == %s\n", origin);
 
     build_server();
-    puts("build ok!");
 
     while(1) {
         clnt_sock = accept(serv_sock, (struct sockaddr*) &clnt_adr, &clnt_adr_size);
@@ -88,21 +41,75 @@ int main(int argc, char *argv[]){
             handle_client(clnt_sock);
             exit(0);
         }
-        //handle_client(clnt_sock);
     }
 
-//    while(1) {
-//        if(waite_for_client() == 0) {
-//            handle_client();
-//        }
-//    }
-
-    puts("ok 2");
     return 0;
+}
 
+void get_param(int argc, char *argv[]) {
+    char c;
+    unsigned long p;
+    while((c = getopt_long (argc, argv, short_opts, long_opts, NULL)) != -1) {
+        switch(c) {
+            case 'h': {
+                print_usage();
+                exit(0);
+            }
+            case 'b': {
+                options.baddr = optarg;
+                p = strchr(optarg, ':') - optarg;
+                strncpy(setting.baddr_host, optarg, p);
+                strcpy(setting.baddr_port, optarg + p + 1);
+                //printf("badd = %s  %s\n", setting.baddr_port, setting.baddr_host);
+                break;
+            }
+            case 'l': {
+                options.faddr = optarg;
+                p = strchr(optarg, ':') - optarg;
+                strcpy(setting.faddr_port, optarg + p + 1);
+                //printf("fadd = %s\n", setting.faddr_port);
+                break;
+            }
+            case 'c': {
+                options.clientMod = optarg;
+                if(strcmp(optarg, "true") == 0) {
+                    setting.clientMod = CLIENTMOD;
+                } else {
+                    setting.clientMod = SERVERMOD;
+                }
+                break;
+            }
+            case 's': {
+                options.secret = optarg;
+                strncpy(setting.secret, secretToKey(optarg, 16), 16);
+                //setting.secret = secretToKey(optarg, 16);
+                //printf("sec == %s\n", setting.secret);
+                break;
+            }
+            default: {
+                printf("unknow option of %c\n", optopt);
+                break;
+            }
+        }
+    }
+    if(strcmp(setting.baddr_port, "") == 0) {
+        perror("missing option --backend");
+        exit(1);
+    }
+    if(strcmp(setting.baddr_host, "") == 0) {
+        perror("missing option --backend");
+        exit(1);
+    }
+    if(strcmp(setting.secret, "") == 0) {
+        perror("mission option --secret");
+        exit(1);
+    }
 
+    //printf("%s %s %s\n",setting.faddr_port, setting.baddr_port, setting.baddr_host);
+}
 
-
+void print_usage() {
+    puts("xixi");
 }
 
 byte* secretToKey(char* sec, int size) {
@@ -112,69 +119,65 @@ byte* secretToKey(char* sec, int size) {
     MD5_Init(&h);
     int count = size / 16;
     int i,j;
-    printf("count == %d\n", count);
     for(i = 0; i < count; ++i) {
         MD5_Update(&h, sec, strlen(sec));
         MD5_Final(buf2, &h);
-        //printf("buf2 == %s\n",buf2);
-        strncpy(buf, buf2, 16);
+        strncpy(buf, buf2, 15);
     }
-    buf2[15]=0;
-    //printf("len == %d\n",strlen(buf2));
-    for(i=0;i<16; ++i) {
-        printf("%d\n",buf2[i]);
-    }
+    buf[15]=0;
 
-    return buf2;
+    return buf;
 }
 
 int build_server() {
     memset(&serv_adr, 0, sizeof(serv_adr));
 
-    serv_adr.sin_port = htons(atoi("8765"));
+    serv_adr.sin_port = htons(atoi(setting.faddr_port));
     serv_adr.sin_family = AF_INET;
     serv_adr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     serv_sock = socket(PF_INET, SOCK_STREAM, 0);
 
-    printf("serv sock == %d\n", serv_sock);
+    if(serv_sock < 0) {
+        perror("socket error");
+        exit(1);
+    }
 
     int optval = 1;
     if(setsockopt(serv_sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) {
-        puts("set opt error");
-        exit(0);
+        perror("setsockopt error");
+        exit(1);
     }
 
     if ( bind(serv_sock, (struct sockaddr*)&serv_adr, sizeof(serv_adr)) == -1) {
-        puts("bind error");
-        exit(0);
+        perror("bind error");
+        exit(1);
     }
 
     if( listen(serv_sock,1) == -1 ) {
-        puts("listen error");
-        exit(0);
+        perror("listen error");
+        exit(1);
     }
-
 }
 
 
 void handle_client(int clnt_sock) {
     memset(&remote_adr, 0, sizeof(remote_adr));
+
+    //printf("bass == %s %s \n", setting.baddr_host, setting.baddr_port);
     remote_adr.sin_family = AF_INET;
-
-
-    remote_adr.sin_port = htons(atoi("8766"));
-    remote_adr.sin_addr.s_addr = inet_addr("23.95.113.");
+    remote_adr.sin_port = htons(atoi(setting.baddr_port));
+    remote_adr.sin_addr.s_addr = inet_addr(setting.baddr_host);
 
     remote_sock = socket(PF_INET, SOCK_STREAM, 0);
     if(remote_sock < 0) {
-        puts("build remote error");
-        exit(0);
+        perror("build remote error");
+        exit(1);
     }
-    printf("remote sock == %d\n", remote_sock);
+
     if ( connect(remote_sock, (struct sockaddr *) &remote_adr, sizeof(remote_adr)) < 0) {
-        puts("connect remote error");
-        exit(0);
+        perror("connect remote error");
+        exit(1);
     }
 
     fd_set io;
@@ -182,53 +185,63 @@ void handle_client(int clnt_sock) {
     byte buffer2[4096];
     RC4_KEY rc4key;
     RC4_KEY rc4key2;
-    char keykey[] = "secret";
-    RC4_set_key(&rc4key, 16, key);
-    RC4_set_key(&rc4key2, 16, key);
+
+    RC4_set_key(&rc4key, 16, setting.secret);
+    RC4_set_key(&rc4key2, 16, setting.secret);
+    //printf("secret = %s\n",setting.secret);
     for( ; ; ) {
         FD_ZERO(&io);
         FD_SET(clnt_sock, &io);
         FD_SET(remote_sock, &io);
-        puts("do zero");
-        if( select(fd(), &io, NULL, NULL, NULL) < 0){
+        if( select(maxfd(), &io, NULL, NULL, NULL) < 0){
             puts("select error");
             break;
         }
         if(FD_ISSET(clnt_sock, &io)) {
             int count = recv(clnt_sock, buffer, sizeof(buffer), 0);
             if(count < 0) {
-                puts("error count");
+                perror("error count");
+                close(clnt_sock);
+                close(remote_sock);
                 return ;
             }
-            printf("r count == %d\n", count);
-            if(count == 0) return ;
-            memset(buffer2, 0, sizeof(buffer2));
-            printf("buffer = %ds\n", buffer);
-            //RC4_set_key(&rc4key, 16, key);
+            if(count == 0) {
+                close(clnt_sock);
+                close(remote_sock);
+                return ;
+            }
+            printf("log : read %d byte from client\n", count);
+
+            //memset(buffer2, 0, sizeof(buffer2));
             RC4(&rc4key, count, buffer, buffer2);
+
             send(remote_sock, buffer2, count, 0);
-            puts("send ok");
         }
 
         if(FD_ISSET(remote_sock, &io)) {
             int count = recv(remote_sock, buffer, sizeof(buffer), 0);
             if(count < 0) {
-                puts("error count");
+                perror("error count");
+                close(clnt_sock);
+                close(remote_sock);
                 return ;
             }
-            printf("r2 count == %d\n", count);
-            if(count == 0) return ;
-            memset(buffer2, 0, sizeof(buffer2));
-            //RC4_set_key(&rc4key, 16, key);
+            if(count == 0) {
+                close(clnt_sock);
+                close(remote_sock);
+                return ;
+            }
+            printf("log : read %d byte from remote\n", count);
+            //memset(buffer2, 0, sizeof(buffer2));
             RC4(&rc4key2, count, buffer, buffer2);
+
             send(clnt_sock, buffer2, count, 0);
-            puts("send ok");
         }
     }
 
 }
 
-int fd() {
+unsigned int maxfd() {
     unsigned int fd = clnt_sock;
     if(remote_sock > fd) fd = remote_sock;
     return fd + 1;
