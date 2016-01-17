@@ -30,12 +30,14 @@ struct sockaddr_in serv_adr, clnt_adr, remote_adr;
 int clnt_adr_size;
 byte* secretToKey(char* sec, int size);
 byte key[16];
+
 int main(int argc, char *argv[]){
     puts("1");
    // secretToKey(16);
     //key = secretToKey("secret", 16);
-    strncpy(key, secretToKey("testsecret", 16), 16);
-    printf("sec = %s\n", key);
+    strncpy(key, secretToKey("secret", 16), 16);
+    //printf("sec = %s\n", key);
+    //RC4_set_key(&rc4key, 16, key);
     puts("2");
 //    while ((c = getopt_long(argc, argv, short_opts, long_opts, NULL)) != -1) {
 //        switch(c) {
@@ -179,8 +181,10 @@ void handle_client(int clnt_sock) {
     byte buffer[4096];
     byte buffer2[4096];
     RC4_KEY rc4key;
+    RC4_KEY rc4key2;
+    char keykey[] = "secret";
     RC4_set_key(&rc4key, 16, key);
-
+    RC4_set_key(&rc4key2, 16, key);
     for( ; ; ) {
         FD_ZERO(&io);
         FD_SET(clnt_sock, &io);
@@ -200,7 +204,7 @@ void handle_client(int clnt_sock) {
             if(count == 0) return ;
             memset(buffer2, 0, sizeof(buffer2));
             printf("buffer = %ds\n", buffer);
-            RC4_set_key(&rc4key, 16, key);
+            //RC4_set_key(&rc4key, 16, key);
             RC4(&rc4key, count, buffer, buffer2);
             send(remote_sock, buffer2, count, 0);
             puts("send ok");
@@ -215,8 +219,8 @@ void handle_client(int clnt_sock) {
             printf("r2 count == %d\n", count);
             if(count == 0) return ;
             memset(buffer2, 0, sizeof(buffer2));
-            RC4_set_key(&rc4key, 16, key);
-            RC4(&rc4key, count, buffer, buffer2);
+            //RC4_set_key(&rc4key, 16, key);
+            RC4(&rc4key2, count, buffer, buffer2);
             send(clnt_sock, buffer2, count, 0);
             puts("send ok");
         }
