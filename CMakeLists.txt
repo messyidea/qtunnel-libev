@@ -4,13 +4,8 @@ project(qtunnel_c)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
 find_package(PkgConfig REQUIRED)
-pkg_search_module(LIBSODIUM REQUIRED libsodium)
 pkg_search_module(OPENSSL REQUIRED openssl)
 
-
-include_directories(${LIBSODIUM_INCLUDE_DIRS})
-link_directories(${LIBSODIUM_LIBRARY_DIRS})
-add_definitions(${LIBSODIUM_CFLAGS_OTHER})
 
 include_directories(${OPENSSL_INCLUDE_DIRS})
 link_directories(${OPENSSL_LIBRARY_DIRS})
@@ -19,6 +14,6 @@ add_definitions(${OPENSSL_CFLAGS_OTHER})
 set(SOURCE_FILES qtunnel.c)
 add_executable(qtunnel_c ${SOURCE_FILES})
 
-target_link_libraries(qtunnel_c ${LIBSODIUM_LIBRARIES} ${OPENSSL_LIBRARIES})
+target_link_libraries(qtunnel_c ${OPENSSL_LIBRARIES})
 
 #see http://stackoverflow.com/questions/27514291/how-to-add-compiler-arguments-using-cmake
