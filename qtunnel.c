@@ -39,6 +39,7 @@ int main(int argc, char *argv[]){
             handle_client(clnt_sock);
             exit(0);
         }
+        close(clnt_sock);
     }
 
     return 0;
