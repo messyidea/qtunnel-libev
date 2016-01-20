@@ -2,6 +2,8 @@
 
 [qtunnel](https://github.com/getqujing/qtunnel) in c
 
+感觉fork太占资源，准备改成单进程。暂不能编译。
+
 As qtunnel can not run on my loongson 8089d (alloc memory error, gccgo), I write this.
 
 Because of lacking knowledge of openssl and aes, it could only support rc4 now.
