@@ -36,8 +36,8 @@ static struct option long_opts[] = {
 byte* secretToKey(char* sec, int size);
 void get_param(int argc, char *argv[]);
 void print_usage();
-unsigned int maxfd();
-void handle_client(int clnt_sock);
+int maxfd(int a, int b);
+void* handle_client(void *arg);
 int build_server();
 byte* secretToKey(char* sec, int size);
 
