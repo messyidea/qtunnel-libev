@@ -36,11 +36,11 @@ static struct option long_opts[] = {
 byte* secretToKey(char* sec, int size);
 void get_param(int argc, char *argv[]);
 void print_usage();
-unsigned int maxfd();
-void handle_client(int clnt_sock);
 int build_server();
 byte* secretToKey(char* sec, int size);
-
+void handle_local(int pos);
+void handle_remote(int pos);
+void handle_accept();
 
 #define CLIENTMOD 0
 #define SERVERMOD 1

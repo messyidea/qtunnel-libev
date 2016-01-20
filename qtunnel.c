@@ -10,6 +10,7 @@
 #include <openssl/rc4.h>
 #include <openssl/md5.h>
 #include <openssl/evp.h>
+#include <sys/ioctl.h>
 #include "qtunnel.h"
 
 struct struct_options options;
@@ -29,11 +30,13 @@ RC4_KEY *lokey;
 int maxfd;
 byte** coinput;
 byte** cooutput;
-const int BUFSIZE = 4096;
+const int BUFSIZE = 40960;
+#define SAFE_REALLOC(x, y, z) safeRealloc((void **) (x), (y), (z))
+int safeRealloc(void **data, int oldsize, int newsize);
 
 int main(int argc, char *argv[]){
     int i;
-    colen = 20;
+    colen = 10;
     maxfd = -1;
     cofds = (int *)malloc(sizeof(int) * colen);
     lofds = (int *)malloc(sizeof(int) * colen);
@@ -68,13 +71,13 @@ int main(int argc, char *argv[]){
     build_server();
 
     while(1) {
-        fdset io;
+        fd_set io;
         FD_ZERO(&io);
         FD_SET(serv_sock, &io);
         for(i = 0; i < colen; ++i) {
             if(isused[i] != 0) {
                 FD_SET(cofds[i], &io);
-                FD_sET(lofds[i], &io);
+                FD_SET(lofds[i], &io);
             }
         }
         if ( select(maxfd+1, &io, NULL, NULL, NULL) < 0) {
@@ -83,51 +86,126 @@ int main(int argc, char *argv[]){
         }
         if(FD_ISSET(serv_sock, &io)) {
             handle_accept();
+            puts("1");
         }
 
         for(i = 0; i < colen; ++i) {
-            if(isused[i] != 0) {
+            if(isused[i] != 0 && FD_ISSET(cofds[i], &io)) {
                 handle_local(i);
+            }
+            if(isused[i] != 0 && FD_ISSET(lofds[i], &io)) {
                 handle_remote(i);
             }
         }
 
-        int clnt_adr_size;
-        clnt_sock = accept(serv_sock, (struct sockaddr*) &clnt_adr, &clnt_adr_size);
-        if(fork() == 0) {
-            close(serv_sock);
-            handle_client(clnt_sock);
-            exit(0);
-        }
-        close(clnt_sock);
     }
 
     return 0;
 }
 
 void handle_local(int pos) {
+    //printf("size == %d\n", sizeof(coinput[pos]));
+    int count = recv(cofds[pos], coinput[pos], BUFSIZE, 0);
+    if(count < 0) {
+        perror("error count");
+        close(cofds[pos]);
+        close(lofds[pos]);
+        isused[pos] = 0;
+        return ;
+    }
+    if(count == 0) {
+        close(cofds[pos]);
+        close(lofds[pos]);
+        isused[pos] = 0;
+        return ;
+    }
+    printf("log : read %d byte from client\n", count);
 
+    //memset(buffer2, 0, sizeof(buffer2));
+    RC4(&cokey[pos], count, coinput[pos], cooutput[pos]);
+
+    send(lofds[pos], cooutput[pos], count, 0);
+    puts("send ok");
 }
 
-void handle_remote(int pod) {
-    
+void handle_remote(int pos) {
+    //printf("size == %d\n", sizeof(coinput[pos]));
+    int count = recv(lofds[pos], coinput[pos], BUFSIZE, 0);
+    if(count < 0) {
+        perror("error count");
+        close(cofds[pos]);
+        close(lofds[pos]);
+        isused[pos] = 0;
+        return ;
+    }
+    if(count == 0) {
+        close(cofds[pos]);
+        close(lofds[pos]);
+        isused[pos] = 0;
+        return ;
+    }
+    printf("log : read %d byte from remote\n", count);
+
+    //memset(buffer2, 0, sizeof(buffer2));
+    RC4(&lokey[pos], count, coinput[pos], cooutput[pos]);
+
+    send(cofds[pos], cooutput[pos], count, 0);
+    puts("send ok");
 }
 
 void handle_accept() {
-    int nfd, i, remote_sock;
+    int nfd, i, remote_sock, j, o;
     int clnt_adr_size;
     struct sockaddr_in addr, remote_adr;
     nfd = accept(serv_sock, (struct sockaddr*) &addr, &clnt_adr_size);
 
     if(nfd > maxfd) maxfd = nfd;
-
+    j = 1;
+    ioctl(nfd, FIONBIO, &j);
+    j = 0;
+    setsockopt(nfd, SOL_SOCKET, SO_LINGER, &j, sizeof(j));
     int pos = -1;
 
     for(i = 0; i < colen; ++i) {
-        if(isused[i] == 0) pos = i;
+        if(isused[i] == 0) {
+            pos = i;
+            break;
+        }
     }
 
+    if(pos == -1) {
+        //printf("------------------------------------------------------------------large to %d\n", colen * 2);
+        o = colen;
+        colen = colen * 2;
+        if (!SAFE_REALLOC(&cofds, sizeof(int) * o, sizeof(int) * colen)) {
+			goto Shortage;
+		}
+        if (!SAFE_REALLOC(&lofds, sizeof(int) * o, sizeof(int) * colen)) {
+			goto Shortage;
+		}
+        if (!SAFE_REALLOC(&cokey, sizeof(RC4_KEY) * o, sizeof(RC4_KEY) * colen)) {
+			goto Shortage;
+		}
+        if (!SAFE_REALLOC(&lokey, sizeof(RC4_KEY) * o, sizeof(RC4_KEY) * colen)) {
+			goto Shortage;
+		}
+        if (!SAFE_REALLOC(&coinput, sizeof(byte *) * o, sizeof(byte *) * colen)) {
+			goto Shortage;
+		}
+        if (!SAFE_REALLOC(&cooutput, sizeof(byte *) * o, sizeof(byte *) * colen)) {
+			goto Shortage;
+		}
+        for(i = o; i < colen ; ++i) {
+            isused[i] = 0;
+            coinput[i] = (byte *)malloc(sizeof(byte) * BUFSIZE);
+            cooutput[i] = (byte *)malloc(sizeof(byte) * BUFSIZE);
+        }
+        pos = o;
+    }
+
+
     if(pos != -1) {
+        //printf("pos ====================================================================================== %d\n", pos);
         isused[pos] = 1;
         cofds[pos] = nfd;
         memset(&remote_adr, 0, sizeof(remote_adr));
@@ -136,26 +214,38 @@ void handle_accept() {
         remote_adr.sin_addr.s_addr = inet_addr(setting.baddr_host);
 
         remote_sock = socket(PF_INET, SOCK_STREAM, 0);
-        lofds[pos] = remote_sock;
-
-        if(remote_sock > maxfd) maxfd = remote_sock;
+        printf("socks == %d   |   %d\n", nfd, remote_sock);
 
         if(remote_sock < 0) {
             perror("socket error");
             isused[pos] = 0;
             return ;
         }
+
+        j = 0;
+        setsockopt(remote_sock, SOL_SOCKET, SO_LINGER, &j, sizeof(j));
+
+
+        lofds[pos] = remote_sock;
+
+        if(remote_sock > maxfd) maxfd = remote_sock;
+
+
         if ( connect(remote_sock, (struct sockaddr *) &remote_adr, sizeof(remote_adr)) < 0) {
             perror("connect remote error");
             exit(1);
         }
 
+        j = 1;
+	    ioctl(remote_sock, FIONBIO, &j);
+
         RC4_set_key(&cokey[pos], 16, setting.secret);
         RC4_set_key(&lokey[pos], 16, setting.secret);
-    } else {
-        perror("out of memory!");
-        exit(1);
+        return ;
     }
+Shortage:
+    perror("out of memory!");
+    exit(1);
 }
 
 void get_param(int argc, char *argv[]) {
@@ -276,8 +366,23 @@ int build_server() {
         exit(1);
     }
 
-    if( listen(serv_sock,1) == -1 ) {
+    if( listen(serv_sock,5) == -1 ) {
         perror("listen error");
         exit(1);
     }
+}
+
+int safeRealloc(void **data, int oldsize, int newsize)
+{
+	void *newData = malloc(newsize + 1);
+	if (!newData) {
+		return 0;
+	}
+	if (newsize < oldsize) {
+		memcpy(newData, *data, newsize);
+	} else {
+		memcpy(newData, *data, oldsize);
+	}
+	*data = newData;
+	return 1;
 }
