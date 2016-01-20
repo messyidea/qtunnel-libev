@@ -86,7 +86,6 @@ int main(int argc, char *argv[]){
         }
         if(FD_ISSET(serv_sock, &io)) {
             handle_accept();
-            puts("1");
         }
 
         for(i = 0; i < colen; ++i) {
@@ -159,6 +158,9 @@ void handle_accept() {
     struct sockaddr_in addr, remote_adr;
     nfd = accept(serv_sock, (struct sockaddr*) &addr, &clnt_adr_size);
 
+    //printf("nfd == %d\n", nfd);
+
+    if(nfd == -1) return ;
     if(nfd > maxfd) maxfd = nfd;
     j = 1;
     ioctl(nfd, FIONBIO, &j);
@@ -214,7 +216,7 @@ void handle_accept() {
         remote_adr.sin_addr.s_addr = inet_addr(setting.baddr_host);
 
         remote_sock = socket(PF_INET, SOCK_STREAM, 0);
-        printf("socks == %d   |   %d\n", nfd, remote_sock);
+        //printf("socks == %d   |   %d\n", nfd, remote_sock);
 
         if(remote_sock < 0) {
             perror("socket error");
