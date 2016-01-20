@@ -362,7 +362,8 @@ int build_server() {
         perror("setsockopt error");
         exit(1);
     }
-
+    int j = 1;
+    ioctl(serv_sock, FIONBIO, &j);
     if ( bind(serv_sock, (struct sockaddr*)&serv_adr, sizeof(serv_adr)) == -1) {
         perror("bind error");
         exit(1);
