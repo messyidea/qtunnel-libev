@@ -1,4 +1,4 @@
-# qtunnel-c
+# qtunnel-libev
 
 [qtunnel](https://github.com/getqujing/qtunnel) in c
 
@@ -13,18 +13,34 @@ it can work with [qtunnel](https://github.com/getqujing/qtunnel) in go.
 
 install
 ---
-at first you should install openssl
+at first you should install openssl and libev
 ```
+# install openssl
 sudo apt-get install libssl-dev
+
+
+#install libev
+git clone https://github.com/MarkTseng/libev.git
+cd libev
+./configure
+make
+sudo make install
 ```
+
+Libev needs some environment variables, so you should run some commands after you run the qtunnel
+```
+export LIBDIR=/usr/local/lib
+export LD_LIBRARY_PATH=/usr/local/lib
+export LD_RUN_PATH=/usr/local/lib
+```
+
+
 then git clone and make
 ```
 git clone https://github.com/messyidea/qtunnel-c.git
+cd qtunnel-c
 make
 ```
-
-
-
 
 
 usage
@@ -37,8 +53,6 @@ client: ./qtunnel --listen=127.0.0.1:local_port --backend=server_host:server_por
 
 
 
-
 todo
 ---
-+ support aes
-+ support windows
++ support more encryption method

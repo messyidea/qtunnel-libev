@@ -2,7 +2,6 @@
 #define QTUNNEL_H
 #include <getopt.h>
 #include <unistd.h>
-#include <ev.h>
 typedef unsigned char byte;
 
 struct struct_options {
@@ -37,11 +36,11 @@ static struct option long_opts[] = {
 byte* secretToKey(char* sec, int size);
 void get_param(int argc, char *argv[]);
 void print_usage();
+unsigned int maxfd();
+void handle_client(int clnt_sock);
 int build_server();
 byte* secretToKey(char* sec, int size);
-void local_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
-void remote_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
-void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
+
 
 #define CLIENTMOD 0
 #define SERVERMOD 1

@@ -7,27 +7,58 @@
 #include <string.h>
 #include <sys/select.h>
 #include <unistd.h>
-#include <signal.h>
 #include <openssl/rc4.h>
 #include <openssl/md5.h>
 #include <openssl/evp.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
 #include "qtunnel.h"
+#include <ev.h>
+
 
 struct struct_options options;
 struct struct_setting setting;
 
-int serv_sock, clnt_sock, remote_sock;
-struct sockaddr_in serv_adr, clnt_adr, remote_adr;
-int clnt_adr_size;
+int serv_sock;
+struct sockaddr_in serv_adr;
+//int clnt_adr_size;
+int colen;
+//struct sockaddr_in *clnt_adr;
+//struct sockaddr_in *remote_adr;
 
-void sigCatcher(int n) {
-    printf("a child process dies\n");
-    while(waitpid(-1, NULL, WNOHANG) > 0);
-}
+const int BUFSIZE = 40960;
+#define SAFE_REALLOC(x, y, z) safeRealloc((void **) (x), (y), (z))
+int safeRealloc(void **data, int oldsize, int newsize);
+struct tunnel_ctx {
+    ev_io io;
+    int fd;
+    RC4_KEY key;
+    char* buf;
+    int id;
+};
+int* isused;
+struct tunnel_ctx* lotunnel;
+struct tunnel_ctx* cotunnel;
+
 
 int main(int argc, char *argv[]){
+    struct ev_loop *loop = ev_default_loop(0);
+    int i;
+    colen = 100;
+    isused = (int*)malloc(sizeof(int) * colen);
+    lotunnel = (struct tunnel_ctx*)malloc(sizeof(struct tunnel_ctx) * colen);
+    cotunnel = (struct tunnel_ctx*)malloc(sizeof(struct tunnel_ctx) * colen);
 
-    signal(SIGCHLD, sigCatcher);
+    //clear and malloc buf
+    for(i = 0; i < colen; ++i) {
+        isused[i] = 0;
+        cotunnel[i].id = i;
+        lotunnel[i].id = i;
+        cotunnel[i].buf = (byte*)malloc(sizeof(byte) * BUFSIZE);
+        lotunnel[i].buf = (byte*)malloc(sizeof(byte) * BUFSIZE);
+    }
+
+    struct ev_io socket_accept;
 
     get_param(argc, argv);
 
@@ -39,17 +70,190 @@ int main(int argc, char *argv[]){
 
     build_server();
 
+    ev_io_init(&socket_accept, accept_cb, serv_sock, EV_READ);
+    ev_io_start(loop, &socket_accept);
+
     while(1) {
-        clnt_sock = accept(serv_sock, (struct sockaddr*) &clnt_adr, &clnt_adr_size);
-        if(fork() == 0) {
-            close(serv_sock);
-            handle_client(clnt_sock);
-            exit(0);
-        }
-        close(clnt_sock);
+        ev_loop(loop, 0);
     }
 
     return 0;
+}
+
+void local_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
+
+    if(EV_ERROR & revents)
+    {
+      printf("error event in read");
+      return;
+    }
+    //puts("remote_cb");
+    //printf("size == %d\n", sizeof(coinput[pos]));
+    struct tunnel_ctx* tunnel = (struct tunnel_ctx*)watcher;
+    int count = recv(tunnel->fd, tunnel->buf, BUFSIZE, 0);
+    int pos = tunnel->id;
+    if(count < 0) {
+        perror("error count");
+        ev_io_stop(loop, watcher);
+        ev_io_stop(loop, &(cotunnel[pos].io));
+        close(lotunnel[pos].fd);
+        close(cotunnel[pos].fd);
+        isused[pos] = 0;
+        return ;
+    }
+    if(count == 0) {
+        ev_io_stop(loop, watcher);
+        ev_io_stop(loop, &(cotunnel[pos].io));
+        close(lotunnel[pos].fd);
+        close(cotunnel[pos].fd);
+        isused[pos] = 0;
+        return ;
+    }
+    printf("log : read %d byte from client\n", count);
+
+    //memset(buffer2, 0, sizeof(buffer2));
+    RC4(&tunnel->key, count, tunnel->buf, tunnel->buf);
+
+    send(cotunnel[tunnel->id].fd, tunnel->buf, count, 0);
+    puts("send ok");
+}
+
+void remote_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
+
+    if(EV_ERROR & revents)
+    {
+      printf("error event in read");
+      return;
+    }
+
+    //puts("remote_cb");
+    struct tunnel_ctx* tunnel = (struct tunnel_ctx*)watcher;
+    int count = recv(tunnel->fd, tunnel->buf, BUFSIZE, 0);
+    int pos = tunnel->id;
+    if(count < 0) {
+        perror("error count");
+        ev_io_stop(loop, watcher);
+        ev_io_stop(loop, &(lotunnel[pos].io));
+        close(lotunnel[pos].fd);
+        close(cotunnel[pos].fd);
+        isused[pos] = 0;
+        return ;
+    }
+    if(count == 0) {
+        ev_io_stop(loop, watcher);
+        ev_io_stop(loop, &(lotunnel[pos].io));
+        close(lotunnel[pos].fd);
+        close(cotunnel[pos].fd);
+        isused[pos] = 0;
+        return ;
+    }
+    printf("log : read %d byte from remote\n", count);
+
+    //memset(buffer2, 0, sizeof(buffer2));
+    RC4(&tunnel->key, count, tunnel->buf, tunnel->buf);
+
+    send(lotunnel[tunnel->id].fd, tunnel->buf, count, 0);
+    puts("send ok");
+}
+
+void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
+    int nfd, i, remote_sock, j, o, flags;
+    int clnt_adr_size;
+    struct sockaddr_in addr, remote_adr;
+    nfd = accept(serv_sock, (struct sockaddr*) &addr, &clnt_adr_size);
+
+    //printf("nfd == %d\n", nfd);
+
+    if(nfd == -1) return ;
+    j = 1;
+    //ioctl(nfd, FIONBIO, &j);
+    flags = fcntl(nfd, F_GETFL, 0);
+    fcntl(nfd, F_SETFL, flags | O_NONBLOCK);
+    j = 0;
+    setsockopt(nfd, SOL_SOCKET, SO_LINGER, &j, sizeof(j));
+
+    int pos = -1;
+
+    for(i = 0; i < colen; ++i) {
+        if(isused[i] == 0) {
+            pos = i;
+            break;
+        }
+    }
+
+    if(pos == -1) {
+        //printf("------------------------------------------------------------------large to %d\n", colen * 2);
+        o = colen;
+        colen = colen * 2;
+        if (!SAFE_REALLOC(&isused, sizeof(int) * o, sizeof(int) * colen)) {
+			goto Shortage;
+		}
+        if (!SAFE_REALLOC(&lotunnel, sizeof(struct tunnel_ctx) * o, sizeof(struct tunnel_ctx) * colen)) {
+			goto Shortage;
+		}
+        if (!SAFE_REALLOC(&cotunnel, sizeof(struct tunnel_ctx) * o, sizeof(struct tunnel_ctx) * colen)) {
+			goto Shortage;
+		}
+
+        for(i = o; i < colen ; ++i) {
+            isused[i] = 0;
+            lotunnel[i].buf = (byte *)malloc(sizeof(byte) * BUFSIZE);
+            cotunnel[i].buf = (byte *)malloc(sizeof(byte) * BUFSIZE);
+            lotunnel[i].id = i;
+            cotunnel[i].id = i;
+        }
+        pos = o;
+    }
+
+
+    if(pos != -1) {
+        //printf("pos ====================================================================================== %d\n", pos);
+        isused[pos] = 1;
+
+        lotunnel[pos].fd = nfd;
+
+        memset(&remote_adr, 0, sizeof(remote_adr));
+        remote_adr.sin_family = AF_INET;
+        remote_adr.sin_port = htons(atoi(setting.baddr_port));
+        remote_adr.sin_addr.s_addr = inet_addr(setting.baddr_host);
+
+        remote_sock = socket(PF_INET, SOCK_STREAM, 0);
+        //printf("socks == %d   |   %d\n", nfd, remote_sock);
+
+        if(remote_sock < 0) {
+            perror("socket error");
+            isused[pos] = 0;
+            close(nfd);
+            return ;
+        }
+
+        j = 0;
+        setsockopt(remote_sock, SOL_SOCKET, SO_LINGER, &j, sizeof(j));
+
+        cotunnel[pos].fd = remote_sock;
+
+        if ( connect(remote_sock, (struct sockaddr *) &remote_adr, sizeof(remote_adr)) < 0) {
+            perror("connect remote error");
+            exit(1);
+        }
+
+        j = 1;
+	    //ioctl(remote_sock, FIONBIO, &j);
+        flags = fcntl(remote_sock, F_GETFL, 0);
+        fcntl(remote_sock, F_SETFL, flags | O_NONBLOCK);
+
+        RC4_set_key(&(lotunnel[pos].key), 16, setting.secret);
+        RC4_set_key(&(cotunnel[pos].key), 16, setting.secret);
+
+        ev_io_init(&(lotunnel[pos].io), local_cb, nfd, EV_READ);
+        ev_io_init(&(cotunnel[pos].io), remote_cb, remote_sock, EV_READ);
+        ev_io_start(loop, &(lotunnel[pos].io));
+        ev_io_start(loop, &(cotunnel[pos].io));
+        return ;
+    }
+Shortage:
+    perror("out of memory!");
+    exit(1);
 }
 
 void get_param(int argc, char *argv[]) {
@@ -150,6 +354,7 @@ int build_server() {
 
     serv_sock = socket(PF_INET, SOCK_STREAM, 0);
 
+
     if(serv_sock < 0) {
         perror("socket error");
         exit(1);
@@ -160,103 +365,30 @@ int build_server() {
         perror("setsockopt error");
         exit(1);
     }
-
+    int flags = fcntl(serv_sock, F_GETFL, 0);
+    fcntl(serv_sock, F_SETFL, flags | O_NONBLOCK);
     if ( bind(serv_sock, (struct sockaddr*)&serv_adr, sizeof(serv_adr)) == -1) {
         perror("bind error");
         exit(1);
     }
 
-    if( listen(serv_sock,1) == -1 ) {
+    if( listen(serv_sock,5) == -1 ) {
         perror("listen error");
         exit(1);
     }
 }
 
-
-void handle_client(int clnt_sock) {
-    memset(&remote_adr, 0, sizeof(remote_adr));
-
-    //printf("bass == %s %s \n", setting.baddr_host, setting.baddr_port);
-    remote_adr.sin_family = AF_INET;
-    remote_adr.sin_port = htons(atoi(setting.baddr_port));
-    remote_adr.sin_addr.s_addr = inet_addr(setting.baddr_host);
-
-    remote_sock = socket(PF_INET, SOCK_STREAM, 0);
-    if(remote_sock < 0) {
-        perror("build remote error");
-        exit(1);
-    }
-
-    if ( connect(remote_sock, (struct sockaddr *) &remote_adr, sizeof(remote_adr)) < 0) {
-        perror("connect remote error");
-        exit(1);
-    }
-
-    fd_set io;
-    byte buffer[40960];
-    byte buffer2[40960];
-    RC4_KEY rc4key;
-    RC4_KEY rc4key2;
-
-    RC4_set_key(&rc4key, 16, setting.secret);
-    RC4_set_key(&rc4key2, 16, setting.secret);
-    //printf("secret = %s\n",setting.secret);
-    for( ; ; ) {
-        FD_ZERO(&io);
-        FD_SET(clnt_sock, &io);
-        FD_SET(remote_sock, &io);
-        if( select(maxfd(), &io, NULL, NULL, NULL) < 0){
-            puts("select error");
-            break;
-        }
-        if(FD_ISSET(clnt_sock, &io)) {
-            int count = recv(clnt_sock, buffer, sizeof(buffer), 0);
-            if(count < 0) {
-                perror("error count");
-                close(clnt_sock);
-                close(remote_sock);
-                return ;
-            }
-            if(count == 0) {
-                printf("count 0");
-                close(clnt_sock);
-                close(remote_sock);
-                return ;
-            }
-            printf("log : read %d byte from client\n", count);
-
-            //memset(buffer2, 0, sizeof(buffer2));
-            RC4(&rc4key, count, buffer, buffer2);
-
-            send(remote_sock, buffer2, count, 0);
-        }
-
-        if(FD_ISSET(remote_sock, &io)) {
-            int count = recv(remote_sock, buffer, sizeof(buffer), 0);
-            if(count < 0) {
-                perror("error count");
-                close(clnt_sock);
-                close(remote_sock);
-                return ;
-            }
-            if(count == 0) {
-                puts("count 0");
-                close(clnt_sock);
-                close(remote_sock);
-                return ;
-            }
-            printf("log : read %d byte from remote\n", count);
-            //memset(buffer2, 0, sizeof(buffer2));
-            RC4(&rc4key2, count, buffer, buffer2);
-
-            send(clnt_sock, buffer2, count, 0);
-        }
-    }
-
-}
-
-unsigned int maxfd() {
-    unsigned int fd = clnt_sock;
-    if(remote_sock > fd) fd = remote_sock;
-    return fd + 1;
+int safeRealloc(void **data, int oldsize, int newsize)
+{
+	void *newData = malloc(newsize + 1);
+	if (!newData) {
+		return 0;
+	}
+	if (newsize < oldsize) {
+		memcpy(newData, *data, newsize);
+	} else {
+		memcpy(newData, *data, oldsize);
+	}
+	*data = newData;
+	return 1;
 }
