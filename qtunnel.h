@@ -3,6 +3,9 @@
 #include <getopt.h>
 #include <unistd.h>
 #include <ev.h>
+#include <openssl/rc4.h>
+#include <openssl/md5.h>
+#include <openssl/evp.h>
 typedef unsigned char byte;
 
 struct struct_options {
@@ -24,6 +27,24 @@ struct struct_setting {
 
 char *short_opts = "hb:c:l:g:s:";
 
+struct conn_ctx {
+    ev_io io;
+    struct conn *conn;
+};
+
+struct conn {
+    int fd;
+    int buf_len;
+    int buf_idx;
+    char *buf;
+    RC4_KEY key;
+    struct conn_ctx *recv_ctx;
+    struct conn_ctx *send_ctx;
+    struct conn *another;
+};
+
+
+
 static struct option long_opts[] = {
         {"help", no_argument, NULL, 'h'},
         {"backend", required_argument, NULL, 'b'},
@@ -34,13 +55,17 @@ static struct option long_opts[] = {
         {0, 0, 0, 0}
 };
 
+
+
+void free_conn(struct conn *conn);
+void close_and_free(EV_P_ struct conn *conn);
+void send_cb(EV_P_ ev_io  *watcher, int revents);
+void recv_cb(EV_P_ ev_io *watcher, int revents);
 byte* secretToKey(char* sec, int size);
 void get_param(int argc, char *argv[]);
 void print_usage();
 int build_server();
 byte* secretToKey(char* sec, int size);
-void local_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
-void remote_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 
 #define CLIENTMOD 0

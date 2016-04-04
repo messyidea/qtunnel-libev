@@ -1,19 +1,5 @@
-cmake_minimum_required(VERSION 3.3)
 project(qtunnel_c)
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-
-find_package(PkgConfig REQUIRED)
-pkg_search_module(OPENSSL REQUIRED openssl)
-
-
-include_directories(${OPENSSL_INCLUDE_DIRS})
-link_directories(${OPENSSL_LIBRARY_DIRS})
-add_definitions(${OPENSSL_CFLAGS_OTHER})
-
-set(SOURCE_FILES qtunnel.c)
-add_executable(qtunnel_c ${SOURCE_FILES})
-
-target_link_libraries(qtunnel_c ${OPENSSL_LIBRARIES})
-
-#see http://stackoverflow.com/questions/27514291/how-to-add-compiler-arguments-using-cmake
+cmake_minimum_required(VERSION 2.8)
+aux_source_directory(. SRC_LIST)
+add_executable(${PROJECT_NAME} ${SRC_LIST})
+set(CMAKE_EXE_LINKER_FLAGS " -lcrypto -lpthread -lev")
