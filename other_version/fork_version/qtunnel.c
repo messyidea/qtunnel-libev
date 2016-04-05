@@ -125,8 +125,8 @@ void print_usage() {
 }
 
 byte* secretToKey(char* sec, int size) {
-    byte buf[16];
-    byte buf2[16];
+    byte *buf = malloc(sizeof(byte) * 16);
+    byte *buf2 = malloc(sizeof(byte) * 16);
     MD5_CTX h;
     MD5_Init(&h);
     int count = size / 16;

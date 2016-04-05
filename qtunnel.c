@@ -235,6 +235,7 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     local->send_ctx->conn = local;
     local->recv_ctx->conn = local;
 
+
     remote = malloc(sizeof(struct conn));
     remote = malloc(sizeof(struct conn));
     remote->buf = malloc(sizeof(char) * BUFSIZE);
@@ -247,6 +248,7 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     remote->recv_ctx->conn = remote;
 
 
+
     RC4_set_key(&local->key, 16, setting.secret);
     RC4_set_key(&remote->key, 16, setting.secret);
 
@@ -255,6 +257,7 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
 
     ev_io_init(&remote->recv_ctx->io, recv_cb, remote_sock, EV_READ);
     ev_io_init(&remote->send_ctx->io, send_cb, remote_sock, EV_WRITE);
+
     remote->another = local;
     local->another = remote;
 //    puts("start ev");
