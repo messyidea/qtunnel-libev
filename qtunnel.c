@@ -178,7 +178,7 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     int nfd, i, remote_sock, j, o, flags;
     int clnt_adr_size;
     struct sockaddr_in addr, remote_adr;
-    nfd = accept(serv_sock, (struct sockaddr*) &addr, &clnt_adr_size);
+    nfd = accept(serv_sock, NULL, NULL);
 
     if(nfd == -1) return ;
 
