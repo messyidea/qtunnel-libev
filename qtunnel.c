@@ -128,7 +128,7 @@ void recv_cb(EV_P_ ev_io *watcher, int revents) {
     char **buf = &conn->buf;
 
     ssize_t r = recv(conn->fd, *buf, BUFSIZE, 0);
-//    printf("recv %d\n", r);
+    printf("recv %d\n", r);
     if(r == 0) {
         close_and_free(EV_A_ conn->another);
         close_and_free(EV_A_ conn);
@@ -211,7 +211,9 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
 
     if ( connect(remote_sock, (struct sockaddr *) &remote_adr, sizeof(remote_adr)) < 0) {
         perror("connect remote error");
-        exit(1);
+        close(nfd);
+        return ;
+        //exit(1);
     }
 
 
