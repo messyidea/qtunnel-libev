@@ -15,6 +15,7 @@
 #include <errno.h>
 #include "qtunnel.h"
 #include <ev.h>
+#include <netinet/tcp.h>
 
 
 struct struct_options options;
@@ -23,7 +24,7 @@ struct struct_setting setting;
 int serv_sock;
 struct sockaddr_in serv_adr;
 
-const int BUFSIZE = 40960;
+const int BUFSIZE = 4096;
 
 
 int main(int argc, char *argv[]){
@@ -64,10 +65,11 @@ void free_conn(struct conn *conn) {
 }
 
 void close_and_free(EV_P_ struct conn *conn) {
-    puts("close");
+//    puts("close");
     if(conn != NULL) {
         ev_io_stop(EV_A_ &conn->send_ctx->io);
         ev_io_stop(EV_A_ &conn->recv_ctx->io);
+        printf("close fd %d\n", conn->fd);
         close(conn->fd);
         free_conn(conn);
     }
@@ -126,7 +128,7 @@ void recv_cb(EV_P_ ev_io *watcher, int revents) {
     char **buf = &conn->buf;
 
     ssize_t r = recv(conn->fd, *buf, BUFSIZE, 0);
-    printf("recv %d\n", r);
+//    printf("recv %d\n", r);
     if(r == 0) {
         close_and_free(EV_A_ conn->another);
         close_and_free(EV_A_ conn);
@@ -149,7 +151,7 @@ void recv_cb(EV_P_ ev_io *watcher, int revents) {
         if(errno == EAGAIN || errno == EWOULDBLOCK) {
             conn->buf_len = r;
             conn->buf_idx = 0;
-//            ev_io_stop(EV_A_ &conn->recv_ctx->io);
+            ev_io_stop(EV_A_ &conn->recv_ctx->io);
             ev_io_start(EV_A_ &conn->send_ctx->io);
         } else {
             close_and_free(EV_A_ conn->another);
@@ -165,7 +167,12 @@ void recv_cb(EV_P_ ev_io *watcher, int revents) {
     return ;
 }
 
-
+int setnonblocking(int fd) {
+    int flags;
+    if (-1 ==(flags = fcntl(fd, F_GETFL, 0)))
+        flags = 0;
+    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
 
 void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     int nfd, i, remote_sock, j, o, flags;
@@ -173,15 +180,17 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     struct sockaddr_in addr, remote_adr;
     nfd = accept(serv_sock, (struct sockaddr*) &addr, &clnt_adr_size);
 
-//    printf("nfd == %d\n", nfd);
-
     if(nfd == -1) return ;
-    j = 1;
-    //ioctl(nfd, FIONBIO, &j);
-    flags = fcntl(nfd, F_GETFL, 0);
-    fcntl(nfd, F_SETFL, flags | O_NONBLOCK);
-    j = 0;
-    setsockopt(nfd, SOL_SOCKET, SO_LINGER, &j, sizeof(j));
+
+    setnonblocking(nfd);
+
+    int opt = 1;
+    // disable nagle
+    setsockopt(nfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
+#ifdef SO_NOSIGPIPE
+    setsockopt(nfd, SOL_SOCKET, SO_NOSIGPIPE, &opt, sizeof(opt));
+#endif
+
 
     memset(&remote_adr, 0, sizeof(remote_adr));
     remote_adr.sin_family = AF_INET;
@@ -191,24 +200,29 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     remote_sock = socket(PF_INET, SOCK_STREAM, 0);
     printf("socks == %d   |   %d\n", nfd, remote_sock);
 
+
     if(remote_sock < 0) {
         perror("socket error");
         close(nfd);
         return ;
     }
 
-    j = 0;
-    setsockopt(remote_sock, SOL_SOCKET, SO_LINGER, &j, sizeof(j));
+
 
     if ( connect(remote_sock, (struct sockaddr *) &remote_adr, sizeof(remote_adr)) < 0) {
         perror("connect remote error");
         exit(1);
     }
 
-    j = 1;
-    //ioctl(remote_sock, FIONBIO, &j);
-    flags = fcntl(remote_sock, F_GETFL, 0);
-    fcntl(remote_sock, F_SETFL, flags | O_NONBLOCK);
+
+    int opt2 = 1;
+    setsockopt(remote_sock, IPPROTO_TCP, TCP_NODELAY, &opt2, sizeof(opt2));
+#ifdef SO_NOSIGPIPE
+    setsockopt(remote_sock, SOL_SOCKET, SO_NOSIGPIPE, &opt2, sizeof(opt2));
+#endif
+
+    // setup remote socks
+    setnonblocking(remote_sock);
 
     struct conn *local, *remote;
     local = malloc(sizeof(struct conn));
@@ -284,9 +298,7 @@ void get_param(int argc, char *argv[]) {
             case 's': {
                 options.secret = optarg;
                 strncpy(setting.secret, secretToKey(optarg, 16), 16);
-//                puts("s end");
-                //setting.secret = secretToKey(optarg, 16);
-                //printf("sec == %s\n", setting.secret);
+
                 break;
             }
             default: {
@@ -322,8 +334,7 @@ void print_usage() {
 }
 
 byte* secretToKey(char* sec, int size) {
-//    byte buf[16];
-//    byte buf2[16];
+
     byte *buf = malloc(sizeof(char) * 16);
     byte *buf2 = malloc(sizeof(char) * 16);
     MD5_CTX h;
@@ -336,8 +347,7 @@ byte* secretToKey(char* sec, int size) {
         strncpy(buf, buf2, 15);
     }
     buf[15]=0;
-//    puts("get buf");
-//    printf("buf == %s\n", buf);
+
 
     return buf;
 }
@@ -357,20 +367,23 @@ int build_server() {
         exit(1);
     }
 
-    int optval = 1;
-    if(setsockopt(serv_sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) {
-        perror("setsockopt error");
-        exit(1);
-    }
-    int flags = fcntl(serv_sock, F_GETFL, 0);
-    fcntl(serv_sock, F_SETFL, flags | O_NONBLOCK);
+    int opt = 1;
+    setsockopt(serv_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    setsockopt(serv_sock, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
+#ifdef SO_NOSIGPIPE
+    setsockopt(serv_sock, SOL_SOCKET, SO_NOSIGPIPE, &opt, sizeof(opt));
+#endif
+
+
     if ( bind(serv_sock, (struct sockaddr*)&serv_adr, sizeof(serv_adr)) == -1) {
         perror("bind error");
         exit(1);
     }
 
-    if( listen(serv_sock,5) == -1 ) {
+    if( listen(serv_sock, 5) == -1 ) {
         perror("listen error");
         exit(1);
     }
+
+    setnonblocking(serv_sock);
 }
