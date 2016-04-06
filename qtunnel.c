@@ -85,7 +85,13 @@ void send_cb(EV_P_ ev_io  *watcher, int revents) {
 
     struct conn_ctx *conn_ctx = (struct conn_ctx *)watcher;
     struct conn *conn = conn_ctx->conn;
+    struct conn *another = conn->another;
     char **buf = &conn->buf;
+
+    if(another == NULL) {
+        close_and_free(EV_A_ conn);
+        return ;
+    }
 
     if(conn->buf_len == 0) {
 //        puts("send len == 0");
@@ -108,7 +114,12 @@ void send_cb(EV_P_ ev_io  *watcher, int revents) {
             conn->buf_len = 0;
             conn->buf_idx = 0;
             ev_io_stop(EV_A_ &conn->send_ctx->io);
-            ev_io_start(EV_A_ &conn->recv_ctx->io);
+            if(another != NULL) {
+                ev_io_start(EV_A_ &another->recv_ctx->io);
+            } else {
+                close_and_free(EV_A_ another);
+                close_and_free(EV_A_ conn);
+            }
         }
     }
 
@@ -125,15 +136,16 @@ void recv_cb(EV_P_ ev_io *watcher, int revents) {
     struct conn_ctx *conn_ctx = (struct conn_ctx *)watcher;
     struct conn *conn = conn_ctx->conn;
     struct conn *another = conn->another;
-    char **buf = &conn->buf;
+    char **buf = &another->buf;
 
     ssize_t r = recv(conn->fd, *buf, BUFSIZE, 0);
-    printf("recv %d\n", r);
+    printf("fd %d --------> recv %d\n", conn->fd, r);
     if(r == 0) {
+        //printf("errno == %d\n", errno);errno
         close_and_free(EV_A_ conn->another);
         close_and_free(EV_A_ conn);
         return ;
-    } else if (r == -1) {
+    } else if (r < 0) {
         if(errno == EAGAIN || errno == EWOULDBLOCK) {
             return ;
 
@@ -147,22 +159,24 @@ void recv_cb(EV_P_ ev_io *watcher, int revents) {
     RC4(&conn->key, r, *buf, *buf);
 
     int s = send(another->fd, *buf, r, 0);
+    printf("send to fd %d --------> %d\n", another->fd, s);
     if(s == -1) {
         if(errno == EAGAIN || errno == EWOULDBLOCK) {
-            conn->buf_len = r;
-            conn->buf_idx = 0;
+            another->buf_len = r;
+            another->buf_idx = 0;
             ev_io_stop(EV_A_ &conn->recv_ctx->io);
-            ev_io_start(EV_A_ &conn->send_ctx->io);
+            ev_io_start(EV_A_ &another->send_ctx->io);
         } else {
             close_and_free(EV_A_ conn->another);
             close_and_free(EV_A_ conn);
 
         }
+        return ;
     } else if(s < r) {
-        conn->buf_len = r-s;
-        conn->buf_idx = s;
+        another->buf_len = r-s;
+        another->buf_idx = s;
         ev_io_stop(EV_A_ &conn->recv_ctx->io);
-        ev_io_start(EV_A_ &conn->send_ctx->io);
+        ev_io_start(EV_A_ &another->send_ctx->io);
     }
     return ;
 }
@@ -198,7 +212,7 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     remote_adr.sin_addr.s_addr = inet_addr(setting.baddr_host);
 
     remote_sock = socket(PF_INET, SOCK_STREAM, 0);
-    printf("socks == %d   |   %d\n", nfd, remote_sock);
+    printf("new server: local = %d | remote = %d\n", nfd, remote_sock);
 
 
     if(remote_sock < 0) {
@@ -385,7 +399,7 @@ int build_server() {
         exit(1);
     }
 
-    if( listen(serv_sock, 5) == -1 ) {
+    if( listen(serv_sock, 128) == -1 ) {
         perror("listen error");
         exit(1);
     }
