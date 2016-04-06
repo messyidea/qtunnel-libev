@@ -29,6 +29,7 @@ char *short_opts = "hb:c:l:g:s:";
 
 struct conn_ctx {
     ev_io io;
+    ev_timer watcher;
     struct conn *conn;
 };
 
@@ -41,6 +42,7 @@ struct conn {
     struct conn_ctx *recv_ctx;
     struct conn_ctx *send_ctx;
     struct conn *another;
+    int type;
 };
 
 

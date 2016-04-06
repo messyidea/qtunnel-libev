@@ -138,6 +138,12 @@ void recv_cb(EV_P_ ev_io *watcher, int revents) {
     struct conn *another = conn->another;
     char **buf = &another->buf;
 
+    if(conn->type == 0) {
+        ev_timer_again(EV_A_ &conn->recv_ctx->watcher);
+    } else {
+        ev_timer_again(EV_A_ &another->recv_ctx->watcher);
+    }
+
     ssize_t r = recv(conn->fd, *buf, BUFSIZE, 0);
     printf("fd %d --------> recv %d\n", conn->fd, r);
     if(r == 0) {
@@ -187,6 +193,19 @@ int setnonblocking(int fd) {
         flags = 0;
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
+
+void timeout_cb(EV_P_ ev_timer *watcher, int revents) {
+    struct conn_ctx *conn_ctx = (struct conn_ctx*) (((void *)watcher) - sizeof(ev_io));
+    struct conn *local = conn_ctx->conn;
+    struct conn *remote = local->another;
+    printf("time out, close fd %d and %d\n", local->fd, remote->fd);
+
+    ev_timer_stop(EV_A_ watcher);
+
+    close_and_free(EV_A_ local);
+    close_and_free(EV_A_ remote);
+}
+
 
 void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     int nfd, i, remote_sock, j, o, flags;
@@ -250,6 +269,7 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     local->buf_len = 0;
     local->send_ctx->conn = local;
     local->recv_ctx->conn = local;
+    local->type = 0;
 
 
     remote = malloc(sizeof(struct conn));
@@ -262,7 +282,7 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     remote->buf_len = 0;
     remote->send_ctx->conn = remote;
     remote->recv_ctx->conn = remote;
-
+    remote->type = 1;
 
 
     RC4_set_key(&local->key, 16, setting.secret);
@@ -270,6 +290,8 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
 
     ev_io_init(&local->recv_ctx->io, recv_cb, nfd, EV_READ);
     ev_io_init(&local->send_ctx->io, send_cb, nfd, EV_WRITE);
+
+    ev_timer_init(&local->recv_ctx->watcher, timeout_cb, 60, 300);
 
     ev_io_init(&remote->recv_ctx->io, recv_cb, remote_sock, EV_READ);
     ev_io_init(&remote->send_ctx->io, send_cb, remote_sock, EV_WRITE);
