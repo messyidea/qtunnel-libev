@@ -43,6 +43,7 @@ struct conn {
     struct conn_ctx *send_ctx;
     struct conn *another;
     int type;
+    int connected;
 };
 
 

@@ -65,13 +65,15 @@ void free_conn(struct conn *conn) {
 }
 
 void close_and_free(EV_P_ struct conn *conn) {
-//    puts("close");
     if(conn != NULL) {
         ev_io_stop(EV_A_ &conn->send_ctx->io);
         ev_io_stop(EV_A_ &conn->recv_ctx->io);
         printf("close fd %d\n", conn->fd);
         if(conn->type == 0) {
             ev_timer_stop(EV_A_ &conn->recv_ctx->watcher);
+        }
+        if(conn->type == 1) {
+            ev_timer_stop(EV_A_ &conn->send_ctx->watcher);
         }
         close(conn->fd);
         free_conn(conn);
@@ -93,6 +95,24 @@ void send_cb(EV_P_ ev_io  *watcher, int revents) {
 
     if(another == NULL) {
         close_and_free(EV_A_ conn);
+        return ;
+    }
+
+    if(conn->type == 1 && conn->connected == 0) {
+        struct sockaddr_storage addr;
+        socklen_t len = sizeof addr;
+        int r = getpeername(conn->fd, (struct sockaddr*)&addr, &len);
+        if(r == 0) {
+            conn->connected = 1;
+            ev_io_stop(EV_A_ &conn->send_ctx->io);
+            ev_timer_stop(EV_A_ &conn->send_ctx->watcher);
+            ev_io_start(EV_A_ &conn->recv_ctx->io);
+            ev_io_start(EV_A_ &another->recv_ctx->io);
+        } else {
+            printf("error getpeername\n");
+            close_and_free(EV_A_ another);
+            close_and_free(EV_A_ conn);
+        }
         return ;
     }
 
@@ -130,7 +150,6 @@ void send_cb(EV_P_ ev_io  *watcher, int revents) {
 
 
 void recv_cb(EV_P_ ev_io *watcher, int revents) {
-
     if(EV_ERROR & revents)
     {
         printf("error event in read");
@@ -150,7 +169,6 @@ void recv_cb(EV_P_ ev_io *watcher, int revents) {
     ssize_t r = recv(conn->fd, *buf, BUFSIZE, 0);
     printf("fd %d --------> recv %d\n", conn->fd, r);
     if(r == 0) {
-        //printf("errno == %d\n", errno);errno
         close_and_free(EV_A_ conn->another);
         close_and_free(EV_A_ conn);
         return ;
@@ -211,10 +229,24 @@ void timeout_cb(EV_P_ ev_timer *watcher, int revents) {
 }
 
 
-void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
-    int nfd, i, remote_sock, j, o, flags;
-    int clnt_adr_size;
-    struct sockaddr_in addr, remote_adr;
+void remote_timeout_cb(EV_P_ ev_timer *watcher, int revents) {
+    struct conn_ctx *conn_ctx = (struct conn_ctx*) (((void *)watcher) - sizeof(ev_io));
+    struct conn *remote = conn_ctx->conn;
+    struct conn *local = remote->another;
+    printf("time out, close fd %d and %d\n", local->fd, remote->fd);
+
+    ev_timer_stop(EV_A_ watcher);
+
+    if(local != NULL)
+        close_and_free(EV_A_ local);
+    if(remote != NULL)
+        close_and_free(EV_A_ remote);
+}
+
+
+void accept_cb(EV_P_ ev_io *watcher, int revents) {
+    int nfd, i, remote_sock;
+    struct sockaddr_in remote_adr;
     nfd = accept(serv_sock, NULL, NULL);
 
     if(nfd == -1) return ;
@@ -244,16 +276,6 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
         return ;
     }
 
-
-
-    if ( connect(remote_sock, (struct sockaddr *) &remote_adr, sizeof(remote_adr)) < 0) {
-        perror("connect remote error");
-        close(nfd);
-        return ;
-        //exit(1);
-    }
-
-
     int opt2 = 1;
     setsockopt(remote_sock, IPPROTO_TCP, TCP_NODELAY, &opt2, sizeof(opt2));
 #ifdef SO_NOSIGPIPE
@@ -262,6 +284,8 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
 
     // setup remote socks
     setnonblocking(remote_sock);
+
+    connect(remote_sock, (struct sockaddr *) &remote_adr, sizeof(remote_adr));
 
     struct conn *local, *remote;
     local = malloc(sizeof(struct conn));
@@ -287,6 +311,7 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     remote->send_ctx->conn = remote;
     remote->recv_ctx->conn = remote;
     remote->type = 1;
+    remote->connected = 0;
 
 
     RC4_set_key(&local->key, 16, setting.secret);
@@ -296,15 +321,17 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     ev_io_init(&local->send_ctx->io, send_cb, nfd, EV_WRITE);
 
     ev_timer_init(&local->recv_ctx->watcher, timeout_cb, 60, 300);
+    ev_timer_init(&remote->send_ctx->watcher, remote_timeout_cb, 60, 0);
 
     ev_io_init(&remote->recv_ctx->io, recv_cb, remote_sock, EV_READ);
     ev_io_init(&remote->send_ctx->io, send_cb, remote_sock, EV_WRITE);
 
     remote->another = local;
     local->another = remote;
-//    puts("start ev");
-    ev_io_start(loop, &local->recv_ctx->io);
-    ev_io_start(loop, &remote->recv_ctx->io);
+//    ev_io_start(loop, &local->recv_ctx->io);
+//    ev_io_start(loop, &remote->recv_ctx->io);
+    ev_io_start(EV_A_ &remote->send_ctx->io);
+    ev_timer_start(EV_A_ &remote->send_ctx->watcher);
 }
 
 void get_param(int argc, char *argv[]) {
