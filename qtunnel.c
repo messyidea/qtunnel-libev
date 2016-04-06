@@ -70,6 +70,9 @@ void close_and_free(EV_P_ struct conn *conn) {
         ev_io_stop(EV_A_ &conn->send_ctx->io);
         ev_io_stop(EV_A_ &conn->recv_ctx->io);
         printf("close fd %d\n", conn->fd);
+        if(conn->type == 0) {
+            ev_timer_stop(EV_A_ &conn->recv_ctx->watcher);
+        }
         close(conn->fd);
         free_conn(conn);
     }
@@ -171,6 +174,7 @@ void recv_cb(EV_P_ ev_io *watcher, int revents) {
             another->buf_len = r;
             another->buf_idx = 0;
             ev_io_stop(EV_A_ &conn->recv_ctx->io);
+
             ev_io_start(EV_A_ &another->send_ctx->io);
         } else {
             close_and_free(EV_A_ conn->another);
