@@ -25,6 +25,7 @@ int serv_sock;
 struct sockaddr_in serv_adr;
 
 const int BUFSIZE = 4096;
+static int debug = 0;
 
 
 int main(int argc, char *argv[]){
@@ -68,7 +69,10 @@ void close_and_free(EV_P_ struct conn *conn) {
     if(conn != NULL) {
         ev_io_stop(EV_A_ &conn->send_ctx->io);
         ev_io_stop(EV_A_ &conn->recv_ctx->io);
-        printf("close fd %d\n", conn->fd);
+
+        if(debug)
+            printf("close fd %d\n", conn->fd);
+
         if(conn->type == 0) {
             ev_timer_stop(EV_A_ &conn->recv_ctx->watcher);
         }
@@ -109,7 +113,8 @@ void send_cb(EV_P_ ev_io  *watcher, int revents) {
             ev_io_start(EV_A_ &conn->recv_ctx->io);
             ev_io_start(EV_A_ &another->recv_ctx->io);
         } else {
-            printf("error getpeername\n");
+            if(debug)
+                printf("error getpeername\n");
             close_and_free(EV_A_ another);
             close_and_free(EV_A_ conn);
         }
@@ -117,7 +122,6 @@ void send_cb(EV_P_ ev_io  *watcher, int revents) {
     }
 
     if(conn->buf_len == 0) {
-//        puts("send len == 0");
         close_and_free(EV_A_ conn->another);
         close_and_free(EV_A_ conn);
         return ;
@@ -133,7 +137,7 @@ void send_cb(EV_P_ ev_io  *watcher, int revents) {
             conn->buf_len -= s;
             conn->buf_idx += s;
         } else {
-            puts("send all");
+            //send all
             conn->buf_len = 0;
             conn->buf_idx = 0;
             ev_io_stop(EV_A_ &conn->send_ctx->io);
@@ -167,7 +171,10 @@ void recv_cb(EV_P_ ev_io *watcher, int revents) {
     }
 
     ssize_t r = recv(conn->fd, *buf, BUFSIZE, 0);
-    printf("fd %d --------> recv %d\n", conn->fd, r);
+
+    if(debug)
+        printf("fd %d --------> recv %d\n", conn->fd, r);
+
     if(r == 0) {
         close_and_free(EV_A_ conn->another);
         close_and_free(EV_A_ conn);
@@ -186,7 +193,10 @@ void recv_cb(EV_P_ ev_io *watcher, int revents) {
     RC4(&conn->key, r, *buf, *buf);
 
     int s = send(another->fd, *buf, r, 0);
-    printf("send to fd %d --------> %d\n", another->fd, s);
+
+    if(debug)
+        printf("send to fd %d --------> %d\n", another->fd, s);
+
     if(s == -1) {
         if(errno == EAGAIN || errno == EWOULDBLOCK) {
             another->buf_len = r;
@@ -220,7 +230,8 @@ void timeout_cb(EV_P_ ev_timer *watcher, int revents) {
     struct conn_ctx *conn_ctx = (struct conn_ctx*) (((void *)watcher) - sizeof(ev_io));
     struct conn *local = conn_ctx->conn;
     struct conn *remote = local->another;
-    printf("time out, close fd %d and %d\n", local->fd, remote->fd);
+    if(debug)
+        printf("server time out, close fd %d and %d\n", local->fd, remote->fd);
 
     ev_timer_stop(EV_A_ watcher);
 
@@ -233,7 +244,8 @@ void remote_timeout_cb(EV_P_ ev_timer *watcher, int revents) {
     struct conn_ctx *conn_ctx = (struct conn_ctx*) (((void *)watcher) - sizeof(ev_io));
     struct conn *remote = conn_ctx->conn;
     struct conn *local = remote->another;
-    printf("time out, close fd %d and %d\n", local->fd, remote->fd);
+    if(debug)
+        printf("remote time out, close socket %d and %d\n", local->fd, remote->fd);
 
     ev_timer_stop(EV_A_ watcher);
 
@@ -267,7 +279,8 @@ void accept_cb(EV_P_ ev_io *watcher, int revents) {
     remote_adr.sin_addr.s_addr = inet_addr(setting.baddr_host);
 
     remote_sock = socket(PF_INET, SOCK_STREAM, 0);
-    printf("new server: local = %d | remote = %d\n", nfd, remote_sock);
+    if(debug)
+        printf("new socket created: local = %d | remote = %d\n", nfd, remote_sock);
 
 
     if(remote_sock < 0) {
@@ -373,6 +386,11 @@ void get_param(int argc, char *argv[]) {
 
                 break;
             }
+            case 'd': {
+                debug = 1;
+
+                break;
+            }
             default: {
                 printf("unknow option of %c\n", optopt);
                 break;
@@ -392,7 +410,7 @@ void get_param(int argc, char *argv[]) {
         exit(1);
     }
 
-    printf("%s %s %s\n",setting.faddr_port, setting.baddr_port, setting.baddr_host);
+    printf("Listen local port %s\n", setting.faddr_port);
 }
 
 void print_usage() {
@@ -401,7 +419,8 @@ void print_usage() {
   --backend=remotehost:remoteport    remote\n\
   --listen=localhost:localport   local\n\
   --clientmod=true or false  buffer size\n\
-  --secret=secret secret\
+  --secret=secret secret\n\
+  --debug debug\
 \n");
 }
 
@@ -452,7 +471,7 @@ int build_server() {
         exit(1);
     }
 
-    if( listen(serv_sock, 128) == -1 ) {
+    if( listen(serv_sock, SOMAXCONN) == -1 ) {
         perror("listen error");
         exit(1);
     }

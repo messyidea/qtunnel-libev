@@ -25,7 +25,7 @@ struct struct_setting {
     int clientMod;
 };
 
-char *short_opts = "hb:c:l:g:s:";
+char *short_opts = "hdb:c:l:g:s:";
 
 struct conn_ctx {
     ev_io io;
@@ -55,6 +55,7 @@ static struct option long_opts[] = {
         {"listen", required_argument, NULL, 'l'},
         {"logto", required_argument, NULL, 'g'},
         {"secret", required_argument, NULL, 's'},
+        {"debug", no_argument, NULL, 'd'},
         {0, 0, 0, 0}
 };
 
@@ -70,6 +71,8 @@ void print_usage();
 int build_server();
 byte* secretToKey(char* sec, int size);
 void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
+void timeout_cb(EV_P_ ev_timer *watcher, int revents);
+void remote_timeout_cb(EV_P_ ev_timer *watcher, int revents);
 
 #define CLIENTMOD 0
 #define SERVERMOD 1
