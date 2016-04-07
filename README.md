@@ -20,20 +20,8 @@ sudo apt-get install libssl-dev
 
 
 #install libev
-git clone https://github.com/MarkTseng/libev.git
-cd libev
-./configure
-make
-sudo make install
+sudo apt-get install libev-dev
 ```
-
-Libev needs some environment variables, so you should run some commands after you run the qtunnel
-```
-export LIBDIR=/usr/local/lib
-export LD_LIBRARY_PATH=/usr/local/lib
-export LD_RUN_PATH=/usr/local/lib
-```
-
 
 then git clone and make
 ```
