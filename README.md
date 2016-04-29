@@ -44,3 +44,7 @@ client: ./qtunnel --listen=127.0.0.1:local_port --backend=server_host:server_por
 todo
 ---
 + support more encryption method
+
+License
+---
+MIT
