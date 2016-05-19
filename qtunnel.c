@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <sys/socket.h>
 #include <string.h>
 #include <sys/select.h>
@@ -22,8 +23,6 @@ struct struct_options options;
 struct struct_setting setting;
 
 int serv_sock;
-struct sockaddr_in serv_adr;
-
 const int BUFSIZE = 4096;
 static int debug = 0;
 
@@ -258,7 +257,7 @@ void remote_timeout_cb(EV_P_ ev_timer *watcher, int revents) {
 
 void accept_cb(EV_P_ ev_io *watcher, int revents) {
     int nfd, i, remote_sock;
-    struct sockaddr_in remote_adr;
+    struct addrinfo hints, *res;
     nfd = accept(serv_sock, NULL, NULL);
 
     if(nfd == -1) return ;
@@ -272,13 +271,17 @@ void accept_cb(EV_P_ ev_io *watcher, int revents) {
     setsockopt(nfd, SOL_SOCKET, SO_NOSIGPIPE, &opt, sizeof(opt));
 #endif
 
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    int err = getaddrinfo(setting.baddr_host, setting.baddr_port, &hints, &res);
+    if (err) {
+        perror("getaddrinfo error");
+        return;
+    }
 
-    memset(&remote_adr, 0, sizeof(remote_adr));
-    remote_adr.sin_family = AF_INET;
-    remote_adr.sin_port = htons(atoi(setting.baddr_port));
-    remote_adr.sin_addr.s_addr = inet_addr(setting.baddr_host);
+    remote_sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 
-    remote_sock = socket(PF_INET, SOCK_STREAM, 0);
     if(debug)
         printf("new socket created: local = %d | remote = %d\n", nfd, remote_sock);
 
@@ -298,7 +301,7 @@ void accept_cb(EV_P_ ev_io *watcher, int revents) {
     // setup remote socks
     setnonblocking(remote_sock);
 
-    connect(remote_sock, (struct sockaddr *) &remote_adr, sizeof(remote_adr));
+    connect(remote_sock, res->ai_addr, res->ai_addrlen);
 
     struct conn *local, *remote;
     local = malloc(sizeof(struct conn));
@@ -361,14 +364,12 @@ void get_param(int argc, char *argv[]) {
                 p = strchr(optarg, ':') - optarg;
                 strncpy(setting.baddr_host, optarg, p);
                 strcpy(setting.baddr_port, optarg + p + 1);
-                //printf("badd = %s  %s\n", setting.baddr_port, setting.baddr_host);
                 break;
             }
             case 'l': {
                 options.faddr = optarg;
                 p = strchr(optarg, ':') - optarg;
                 strcpy(setting.faddr_port, optarg + p + 1);
-                //printf("fadd = %s\n", setting.faddr_port);
                 break;
             }
             case 'c': {
@@ -444,14 +445,20 @@ byte* secretToKey(char* sec, int size) {
 }
 
 int build_server() {
-    memset(&serv_adr, 0, sizeof(serv_adr));
+    struct addrinfo hints, *res;
+    int s;
 
-    serv_adr.sin_port = htons(atoi(setting.faddr_port));
-    serv_adr.sin_family = AF_INET;
-    serv_adr.sin_addr.s_addr = htonl(INADDR_ANY);
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
 
-    serv_sock = socket(PF_INET, SOCK_STREAM, 0);
+    s = getaddrinfo("0.0.0.0", setting.faddr_port, &hints, &res);
+    if (s != 0) {
+        perror("getaddrinfo error");
+        return -1;
+    }
 
+    serv_sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 
     if(serv_sock < 0) {
         perror("socket error");
@@ -466,7 +473,7 @@ int build_server() {
 #endif
 
 
-    if ( bind(serv_sock, (struct sockaddr*)&serv_adr, sizeof(serv_adr)) == -1) {
+    if ( bind(serv_sock, res->ai_addr, res->ai_addrlen) == -1) {
         perror("bind error");
         exit(1);
     }

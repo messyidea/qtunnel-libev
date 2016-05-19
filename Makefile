@@ -2,10 +2,10 @@ CC = gcc
 CFLAGS = -g -w
 SRCS = qtunnel.c qtunnel.h
 
-all: qtunnel
+all: qtunnel-c
 
-qtunnel: $(SRCS)
-	$(CC) $(CFLAGS) $(SRCS) -o qtunnel -lcrypto -lpthread -lev
+qtunnel-c: $(SRCS)
+	$(CC) $(CFLAGS) $(SRCS) -o qtunnel-c -lcrypto -lpthread -lev
 
 clean:
-	rm -f qtunnel
+	rm -f qtunnel-c
