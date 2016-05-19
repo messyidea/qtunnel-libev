@@ -34,9 +34,10 @@ make
 usage
 ---
 ```
-server: ./qtunnel --listen=0.0.0.0:server_port --backend=127.0.0.1:7655 --clientmod=false --secret=secret
+server: ./qtunnel-c --listen=0.0.0.0:server_port --backend=127.0.0.1:7655 --clientmod=false --secret=secret
 
-client: ./qtunnel --listen=127.0.0.1:local_port --backend=server_host:server_port --clientmod=true --secret=secret
+client: ./qtunnel-c --listen=127.0.0.1:local_port --backend=server_host:server_port --clientmod=true --secret=secret
+
 ```
 
 
