@@ -353,7 +353,7 @@ void accept_cb(EV_P_ ev_io *watcher, int revents) {
 void get_param(int argc, char *argv[]) {
     char c;
     unsigned long p;
-    while((c = getopt_long (argc, argv, short_opts, long_opts, NULL)) != -1) {
+    while(((c = getopt_long (argc, argv, short_opts, long_opts, NULL)) != -1) && (c != 255)) {
         switch(c) {
             case 'h': {
                 print_usage();
