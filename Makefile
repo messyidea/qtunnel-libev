@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -g -w
-SRCS = qtunnel.c qtunnel.h
+SRCS = qtunnel.c
 
 all: qtunnel-c
 
